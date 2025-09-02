@@ -27,6 +27,7 @@ import { AuthGuards } from 'src/comman/Guards/auth.guards';
 import { RoleGuards } from 'src/comman/Guards/role.guards';
 import { Roles } from 'src/comman/decorator/role.decorator';
 import { Role } from 'src/comman/enums/role.enum';
+import { GameParticipation } from 'src/comman/Schema/gameParticipation.schema';
 
 @ApiTags('games')
 @Controller('games')
@@ -103,20 +104,27 @@ export class GameController {
   }
 
   @Post(':id/join')
-  @Roles(Role.User)
-  @ApiOperation({ summary: 'Join a game' })
-  @ApiResponse({ status: 200, description: 'Successfully joined game', type: Game })
-  @ApiResponse({ status: 404, description: 'Game not found' })
-  @ApiResponse({ status: 400, description: 'Cannot join game' })
-  async joinGame(
-    @Param('id') id: string,
-    @Body() joinGameDto: JoinGameDto,
-    @Request() req,
-  ): Promise<Game> {
-    // Set the user ID from the authenticated user
-    joinGameDto.userId = req.user.userId;
-    return this.gameService.joinGame(id, joinGameDto);
-  }
+@Roles(Role.User)
+@ApiOperation({ summary: 'Join a game' })
+@ApiResponse({ status: 200, description: 'Successfully joined game' })
+@ApiResponse({ status: 404, description: 'Game not found' })
+@ApiResponse({ status: 400, description: 'Cannot join game' })
+async joinGame(
+  @Param('id') id: string,
+  @Body() joinGameDto: JoinGameDto,
+  @Request() req,
+): Promise<{ message: string; game: Game; participation: GameParticipation }> {
+  // Set the user ID from the authenticated user
+  joinGameDto.userId = req.user.userId;
+  
+  const result = await this.gameService.joinGame(id, joinGameDto);
+  
+  return {
+    message: 'Successfully joined the game',
+    game: result.game,
+    participation: result.participation
+  };
+}
 
   @Put(':id/start')
   @Roles(Role.User)
@@ -151,7 +159,8 @@ export class GameController {
       throw new ForbiddenException('You can only complete your own games');
     }
     
-    return this.gameService.completeGame(id, winnerId);
+    const result = await this.gameService.completeGame(id, winnerId);
+    return result.game;
   }
 
   @Get('user/participating')
