@@ -11,6 +11,8 @@ import { MailModule } from './comman/Mail/mail.module';
 import { GuardModule } from './comman/Guards/guards.module';
 import { JwtModule } from '@nestjs/jwt';
 import { PayoutModule } from './modules/payout/payout.module';
+import { CloudinaryModule } from './comman/cloudinary/cloudinary.module';
+import { GameModule } from './modules/game/game.module';
 
 @Module({
   imports: [
@@ -34,12 +36,14 @@ import { PayoutModule } from './modules/payout/payout.module';
     AuthModule,
     UserModule,
     PayoutModule,
+    GameModule,
 
     // Common Functional Modules
     SmsModule,
     TokenModule,
     MailModule,
-    GuardModule
+    GuardModule,
+    CloudinaryModule
   ],
   controllers: [],
   providers: [],

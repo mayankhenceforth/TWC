@@ -14,7 +14,7 @@ export class User {
     @Prop({ required: true, trim: true })
     username: string;
 
-    @Prop({ required: true, unique:false })
+    @Prop({ required: true, unique: false })
     contactNumber: string;
 
     @Prop({
@@ -28,6 +28,12 @@ export class User {
     @Prop({ required: true })
     password: string;
 
+    @Prop({ required: false })
+    profileImageUrl?: string;
+
+    @Prop({ required: false })
+    profileImagePublicId?: string;
+    
     @Prop({ required: true, default: "user" })
     role: "admin" | "user" | "super-admin";
 
@@ -45,12 +51,12 @@ export class User {
     otpExpiresAt?: Date;
 
     @Prop({
-        enum: ["forgot-password", "registration", "login","none"],
+        enum: ["forgot-password", "registration", "login", "none"],
     })
     otpType: string;
 
-      @Prop({ type: [{ type: Types.ObjectId, ref: 'Payout' }], default: [] })
-  payoutIds: Types.ObjectId[];
+    @Prop({ type: [{ type: Types.ObjectId, ref: 'Payout' }], default: [] })
+    payoutIds: Types.ObjectId[];
 
     @Prop({ default: true })
     isActive: boolean;
