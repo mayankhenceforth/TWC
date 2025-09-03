@@ -1,18 +1,22 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from './comman/Database/db.module';
+import { DatabaseModule } from './database/db.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ConfigureDB } from './comman/Database/db';
-import { SmsModule } from './comman/SMS/sms.module';
-import { TokenModule } from './comman/token/token.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { UserModule } from './modules/user/user.module';
-import { MailService } from './comman/Mail/mail.service';
-import { MailModule } from './comman/Mail/mail.module';
-import { GuardModule } from './comman/Guards/guards.module';
+import { ConfigureDB } from './database/db';
+import { SmsModule } from './sms/sms.module';
+import { TokenModule } from './token/token.module';
+import { AuthModule } from './auth/auth.module';
+import { UserModule } from './user/user.module';
+import { MailService } from './mail/mail.service';
+import { MailModule } from './mail/mail.module';
+
 import { JwtModule } from '@nestjs/jwt';
-import { PayoutModule } from './modules/payout/payout.module';
-import { CloudinaryModule } from './comman/cloudinary/cloudinary.module';
-import { GameModule } from './modules/game/game.module';
+import { PayoutModule } from './payout/payout.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { GuardModule } from './guards/guards.module';
+import { GameModule } from './game/game.module';
+import { TicketModule } from './ticket/ticket.module';
+import { WalletModule } from './wallet/wallet.module';
+import { TransactionModule } from './transaction/transaction.module';
 
 @Module({
   imports: [
@@ -43,7 +47,10 @@ import { GameModule } from './modules/game/game.module';
     TokenModule,
     MailModule,
     GuardModule,
-    CloudinaryModule
+    CloudinaryModule,
+    TicketModule,
+    WalletModule,
+    TransactionModule
   ],
   controllers: [],
   providers: [],
