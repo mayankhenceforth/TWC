@@ -35,6 +35,14 @@ export class TicketService {
                 titles = response.data.flowers;
                 break;
             }
+            case 'cars': {
+                const response = await axios.get(
+                    'https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/car?format=json'
+                );
+                titles = response.data.Results.map((make) => make.MakeName);
+                break;
+            }
+
             default: {
                 const response = await axios.get(`https://api.mockster.dev/api/v1/animals?Count=${numberOfTickets}`);
                 titles = response.data.map((item: any) => Object.values(item)[0]);
