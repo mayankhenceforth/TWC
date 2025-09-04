@@ -17,6 +17,8 @@ import { GameModule } from './game/game.module';
 import { TicketModule } from './ticket/ticket.module';
 import { WalletModule } from './wallet/wallet.module';
 import { TransactionModule } from './transaction/transaction.module';
+import { PlanModule } from './plan/plan.module';
+import { SubscriptionModule } from './subscription/subscription.module';
 
 @Module({
   imports: [
@@ -50,7 +52,9 @@ import { TransactionModule } from './transaction/transaction.module';
     CloudinaryModule,
     TicketModule,
     WalletModule,
-    TransactionModule
+    TransactionModule,
+    PlanModule,
+    SubscriptionModule
   ],
   controllers: [],
   providers: [],

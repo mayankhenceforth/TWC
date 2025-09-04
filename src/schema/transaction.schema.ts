@@ -6,7 +6,7 @@ export type TransactionDocument = Transaction & Document;
 
 @Schema({ timestamps: true })
 export class Transaction {
-    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: true })
+    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Game', required: false })
     gameId: Types.ObjectId;
 
     @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
@@ -21,14 +21,14 @@ export class Transaction {
     @Prop({ required: true, enum: TransactionStatus, default:TransactionStatus.PENDING })
     status:TransactionStatus;
 
-    @Prop({required:true})
+    @Prop({required:false})
     transactionId: string;
 
     @Prop({required:true,enum:TransactionMethod})
     transactionMethod: TransactionMethod
     
 
-    @Prop({required:true})
+    @Prop({required:false})
     checkoutSessionId: string;
 
     @Prop({ type: Number, default: 0 })

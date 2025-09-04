@@ -33,8 +33,8 @@ export class User {
 
     @Prop({ required: false })
     profileImagePublicId?: string;
-    
-    @Prop({ required: true, enum :Role, default:Role.User })
+
+    @Prop({ required: true, enum: Role, default: Role.User })
     role: Role;
 
 
@@ -58,8 +58,14 @@ export class User {
     @Prop({ type: [{ type: Types.ObjectId, ref: 'Payout' }], default: [] })
     payoutIds: Types.ObjectId[];
 
+    @Prop({ type: Types.ObjectId, ref: 'Wallet' })
+    walletId: Types.ObjectId
+
     @Prop({ default: true })
     isActive: boolean;
+
+    @Prop({ required: false })
+    stripeCustomerId: string
 
 }
 

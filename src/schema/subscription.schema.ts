@@ -1,0 +1,31 @@
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Types } from "mongoose";
+import { SubscriptionStatus } from "src/enums/subscription.enum";
+
+export type SubscriptionDocument = Subscription & Document;
+
+@Schema({ timestamps: true })
+export class Subscription {
+  @Prop({ required: true, type: Types.ObjectId, ref: "User" })
+  userId: Types.ObjectId;
+
+  @Prop({ required: true, type: Types.ObjectId, ref: "Plan" })
+  planId: Types.ObjectId;
+
+  @Prop({ required: true })
+  startDate: Date;
+
+  @Prop({ required: true })
+  endDate: Date;
+
+  @Prop({ default: true })
+  autoRenew: boolean;
+
+  @Prop({ required: true, enum: SubscriptionStatus })
+  status: SubscriptionStatus;
+
+  @Prop({ required: false })
+  stripeSubscriptionId?: string
+}
+
+export const SubscriptionSchema = SchemaFactory.createForClass(Subscription);

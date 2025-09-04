@@ -7,7 +7,9 @@ import * as bodyParser from 'body-parser';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.use('/stripe/webhook', bodyParser.raw({ type: 'application/json' }));
+  app.use('/transaction/webhook', bodyParser.raw({ type: 'application/json' }));
+app.use(bodyParser.json()); 
+
 
   app.useGlobalPipes(
     new ValidationPipe({

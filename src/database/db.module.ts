@@ -7,6 +7,8 @@ import { Ticket, TicketSchema } from "src/schema/ticket.schema";
 import { Account, AccountSchema } from "src/schema/account.schema";
 import { Wallet, WalletSchema } from "src/schema/wallet.schema";
 import { Transaction, TransactionSchema } from "src/schema/transaction.schema";
+import { Plan, PlanSchema } from "src/schema/plan.schema";
+import { Subscription, SubscriptionSchema } from "src/schema/subscription.schema";
 
 
 @Global()
@@ -19,7 +21,9 @@ import { Transaction, TransactionSchema } from "src/schema/transaction.schema";
         {name:GameParticipation.name ,schema:GameParticipationSchema},
         {name:Ticket.name ,schema:TicketSchema},
         {name:Wallet.name ,schema:WalletSchema},
-        {name:Transaction.name ,schema:TransactionSchema}
+        {name:Transaction.name ,schema:TransactionSchema},
+        {name:Plan.name ,schema:PlanSchema},
+        {name:Subscription.name ,schema:SubscriptionSchema}
     ])],
     providers: [],
     exports: [MongooseModule]

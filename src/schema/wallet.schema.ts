@@ -19,6 +19,12 @@ export class Wallet {
 
     @Prop({ required: true, default: true })
     isActive: boolean
+    
+    @Prop({ required: true, default: 0 })
+    lastTransactionAmount:number
+
+    @Prop({ type: Types.ObjectId, ref: "Transaction" ,default:'' ,required:true })
+    lastTransactionId: Types.ObjectId;
 
 
 }
