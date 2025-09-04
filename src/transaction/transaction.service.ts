@@ -383,4 +383,33 @@ export class TransactionService {
 
     return subscriptionDoc;
   }
+
+
+  // async upgradeSubscriptions(subsId: string, stripe_plan_id: string) {
+  //   try {
+  //     const subscription = await this.stripe.subscriptions.retrieve(subsId);
+  //     let data_to_upadte = {
+  //       cancel_at_period_end: false,
+  //       trial_end: "now",
+  //       payment_behavior: 'default_incomplete',
+  //       proration_behavior: 'always_invoice',
+  //       items: [
+  //         {
+  //           id: subscription.items.data[0].id,
+  //           plan: stripe_plan_id,
+  //         },
+  //       ],
+  //       expand: ['latest_invoice.payment_intent']
+  //     };
+  //     const updatedSubscription = await this.stripe.subscriptions.update(subsId, data_to_upadte);
+  //     return updatedSubscription;
+  //   } catch (error) {
+  //     throw error
+  //   }
+  // }
+
+
+
+
+
 }
