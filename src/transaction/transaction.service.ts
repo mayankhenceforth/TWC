@@ -556,6 +556,83 @@ export class TransactionService {
   }
 
 
+  //   async downgradeSubscriptions(subscriptionId: string, newStripePlanId: string, userId: Types.ObjectId) {
+  //   try {
+  //     const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+
+  //     if (!subscription || !subscription.items.data.length) {
+  //       throw new Error('Subscription not found or has no items');
+  //     }
+
+  //     if (subscription.status === 'canceled' || subscription.ended_at) {
+  //       throw new BadRequestException(
+  //         'This subscription is already canceled. You cannot downgrade it. Please create a new subscription.'
+  //       );
+  //     }
+
+
+  //     const currentPeriodEnd = subscription.current_period_end * 1000;
+
+  //     // 1. Schedule downgrade after current period
+  //     const updatedSubscription = await this.stripe.subscriptions.update(subscriptionId, {
+  //       cancel_at_period_end: false, // keep subscription alive until current period ends
+  //       items: [
+  //         {
+  //           id: subscription.items.data[0].id,
+  //           plan: newStripePlanId,
+  //         },
+  //       ],
+  //       proration_behavior: 'none', // do not charge/refund mid-cycle
+  //     });
+
+  //     // 2. Update local subscription record
+  //     const subDoc = await this.subscriptionModel.findOneAndUpdate(
+  //       { stripeSubscriptionId: subscriptionId },
+  //       {
+  //         $set: {
+  //           newPlanId: newStripePlanId, // we store the upcoming plan
+  //           currentPeriodEnd: new Date(currentPeriodEnd),
+  //           status: SubscriptionStatus.ACTIVE, // still active until current period ends
+  //         },
+  //       },
+  //       { new: true }
+  //     );
+
+  //     // 3. Record transaction for downgrade (future effect)
+  //     const transaction = await this.transactionModel.create({
+  //       userId,
+  //       amount: 0, // no immediate charge since proration is disabled
+  //       currency: subscription.currency || 'usd',
+  //       status: TransactionStatus.PENDING,
+  //       transactionMethod: TransactionMethod.CARD,
+  //       type: TransactionType.SUBSCRIPTION_DOWNGRADE,
+  //       stripeSubscriptionId: subscription.id,
+  //       oldPlanId: subDoc?.planId,
+  //       newPlanId: newStripePlanId,
+  //       description: `Scheduled downgrade to new plan after ${new Date(currentPeriodEnd).toISOString()}`,
+  //     });
+
+  //     if (subDoc && subDoc.userId) {
+  //       const user = await this.userModel.findById(subDoc.userId);
+  //       if (user?.walletId) {
+  //         await this.walletModel.findByIdAndUpdate(user.walletId, {
+  //           $push: { transactions: transaction._id },
+  //         });
+  //       }
+  //     }
+
+  //     return {
+  //       updatedSubscription,
+  //       message: `Your plan will downgrade to the new plan on ${new Date(currentPeriodEnd).toDateString()}`,
+  //     };
+  //   } catch (error: any) {
+  //     console.error('Failed to downgrade subscription:', error);
+  //     throw new BadRequestException(`Failed to downgrade subscription: ${error.message}`);
+  //   }
+  // }
+
+
+
 
 
 }
