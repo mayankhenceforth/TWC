@@ -12,10 +12,10 @@ export class Subscription {
   @Prop({ required: true, type: Types.ObjectId, ref: "Plan" })
   planId: Types.ObjectId;
 
-  @Prop({ required: true })
+  @Prop({ required: false })
   startDate: Date;
 
-  @Prop({ required: true })
+  @Prop({ required: false })
   endDate: Date;
 
   @Prop({ default: true })

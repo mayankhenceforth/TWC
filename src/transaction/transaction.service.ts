@@ -217,18 +217,24 @@ export class TransactionService {
 
         case 'invoice.created': {
           const invoice = event.data.object as Stripe.Invoice;
-          console.log(`Invoice created: ${invoice.id} for customer ${invoice.customer} ${invoice.parent?.subscription_details?.metadata?.subscriptionDocId}`);
+          console.log(`Invoice created: ${invoice.id} for customer ${invoice.customer} ${invoice.parent?.subscription_details?.metadata?.subscriptionDocId}`)
 
           break;
         }
 
         case 'invoice.paid': {
           const invoice = event.data.object as Stripe.Invoice;
-          const subscriptionDocumentId = invoice.parent?.subscription_details?.metadata?.subscriptionDocId
+
+          const subscriptionDetails = invoice.parent?.subscription_details
+
+          const subscriptionDocumentId = subscriptionDetails?.metadata?.subscriptionDocId
+          const transactionId = subscriptionDetails?.metadata?.transactionId
+
+          await this.transactionModel.findByIdAndUpdate(transactionId, {
+            status: TransactionStatus.SUCCESS
+          })
 
           await this.subscriptionModel.findByIdAndUpdate(subscriptionDocumentId, {
-            startDate: new Date(invoice.period_start * 1000),
-            endDate: new Date(invoice.period_end * 1000),
             status: SubscriptionStatus.ACTIVE,
           })
           break;
@@ -236,13 +242,20 @@ export class TransactionService {
 
         case 'invoice.payment_failed': {
           const invoice = event.data.object as Stripe.Invoice;
-          const subscriptionDocumentId = invoice.parent?.subscription_details?.metadata?.subscriptionDocId
+
+          const subscriptionDetails = invoice.parent?.subscription_details
+
+          const subscriptionDocumentId = subscriptionDetails?.metadata?.subscriptionDocId
+          const transactionId = subscriptionDetails?.metadata?.transactionId
+
+          await this.transactionModel.findByIdAndUpdate(transactionId, {
+            status: TransactionStatus.FAILED
+          })
 
           await this.subscriptionModel.findByIdAndUpdate(subscriptionDocumentId, {
             startDate: new Date(invoice.period_start * 1000),
             endDate: new Date(invoice.period_end * 1000),
-            currentPeriodEnd: new Date(invoice.period_end * 1000),
-            currentPeriodStart: new Date(invoice.period_start * 1000),
+
           })
           break;
         }
@@ -289,8 +302,6 @@ export class TransactionService {
       product: product.id,
       nickname: name,
     });
-
-    console.log("plan--------------->", plan)
 
     const planDocument = new this.planModel({
       createdBy: userId,
@@ -377,20 +388,14 @@ export class TransactionService {
 
     if (!plan) throw new NotFoundException('Plan not found');
     if (!user) throw new NotFoundException('User not found');
-    if (user.stripeSubscriptionId) throw new BadRequestException(
-      'You are not able to buy a new subscription. Please upgrade your existing subscription.'
-    );
     if (!plan.stripePlanId) throw new NotFoundException('Plan is missing Stripe plan ID');
+
     const startDate = new Date();
     const subscriptionDoc = new this.subscriptionModel({
       userId,
       planId,
       stripeSubscriptionId: null,
-      status: SubscriptionStatus.INCOMPLETE,
-      startDate,
-      endDate: new Date(startDate.getTime() + (plan.duration || 30) * 24 * 60 * 60 * 1000),
-      currentPeriodStart: startDate,
-      currentPeriodEnd: new Date(startDate.getTime() + (plan.duration || 30) * 24 * 60 * 60 * 1000),
+      status: SubscriptionStatus.INCOMPLETE
     });
     await subscriptionDoc.save();
 
@@ -401,17 +406,33 @@ export class TransactionService {
         const customer = await this.stripe.customers.create({
           email: user.email || undefined,
           name: user.name || undefined,
-          metadata: { userId: userId.toString(), subscriptionDocId: subscriptionDoc._id.toString() },
+          metadata: {
+            userId: userId.toString(),
+            subscriptionDocId: subscriptionDoc._id.toString()
+          },
         });
 
         stripeCustomerId = customer.id;
         user.stripeCustomerId = stripeCustomerId;
-
         await user.save();
       } catch (error: any) {
         throw new Error(`Failed to create Stripe customer: ${error.message}`);
       }
     }
+
+    const transaction = await this.transactionModel.create({
+      userId: userId,
+      amount: plan.price,
+      currency: plan.currency || 'usd',
+      status: TransactionStatus.PENDING,
+      transactionMethod: TransactionMethod.CARD,
+      type: TransactionType.SUBSCRIPTION_CREATE,
+      stripeSubscriptionId: null,
+      newPlanId: planId,
+      description: `Subscription purchase: ${plan.name}`
+    });
+
+    const transactionDocument = transaction as unknown as TransactionDocument;
 
     let subscription: Stripe.Subscription;
     try {
@@ -421,51 +442,49 @@ export class TransactionService {
         payment_settings: { save_default_payment_method: 'on_subscription' },
         payment_behavior: 'default_incomplete',
         expand: ['latest_invoice.payment_intent'],
-        metadata: { subscriptionDocId: subscriptionDoc._id.toString() },
+        metadata: {
+          subscriptionDocId: subscriptionDoc._id.toString(),
+          transactionId: (transactionDocument._id as Types.ObjectId).toString(),
+          userId: userId.toString(),
+          planId: planId.toString()
+        },
       });
-
     } catch (error: any) {
+      await this.transactionModel.findByIdAndUpdate(transactionDocument._id, {
+        status: TransactionStatus.FAILED,
+        description: `Subscription creation failed: ${error.message}`
+      });
       throw new Error(`Failed to create Stripe subscription: ${error.message}`);
     }
 
     subscriptionDoc.stripeSubscriptionId = subscription.id;
     subscriptionDoc.status = subscription.status as SubscriptionStatus;
-    subscriptionDoc.startDate = startDate;
-    subscriptionDoc.currentPeriodStart = startDate;
-    subscriptionDoc.currentPeriodEnd = subscriptionDoc.endDate
+    subscriptionDoc.startDate = new Date(subscription.items?.data[0]?.current_period_start * 1000);
+    subscriptionDoc.endDate = new Date(subscription.items?.data[0]?.current_period_end * 1000);
     await subscriptionDoc.save();
 
-    user.stripeSubscriptionId = subscription.id
+    user.stripeSubscriptionId = subscription.id;
+    await user.save();
 
-    await user.save()
-
-    const transaction = await this.transactionModel.create({
-      userId: userId,
-      amount: plan.price,
-      currency: plan.currency || 'usd',
-      status: TransactionStatus.PENDING, 
-      transactionMethod: TransactionMethod.CARD, 
-      type: TransactionType.SUBSCRIPTION_CREATE,
+    await this.transactionModel.findByIdAndUpdate(transactionDocument._id, {
       stripeSubscriptionId: subscription.id,
-      newPlanId: planId,
-      description: `Subscription purchase: ${plan.name}`
+      transactionId: subscription.latest_invoice ? (subscription.latest_invoice as any).id : undefined
     });
 
     if (user.walletId) {
       await this.walletModel.findByIdAndUpdate(user.walletId, {
-        $push: { transactions: transaction._id },
+        $push: { transactions: transactionDocument._id },
       });
     }
-
 
     return {
       subscription: subscriptionDoc,
       paymentIntent: subscription.latest_invoice
         ? (subscription.latest_invoice as any).payment_intent
         : null,
+      transactionId: transactionDocument._id
     };
   }
-
 
 
   async upgradeSubscriptions(subscriptionId: string, newStripePlanId: string) {
@@ -489,6 +508,9 @@ export class TransactionService {
         expand: ['latest_invoice.payment_intent'],
       });
 
+
+
+      console.log('subscription upgraded data:', updatedSubscription)
       console.log(' Subscription upgraded successfully:', updatedSubscription.id);
       return updatedSubscription;
     } catch (error) {
@@ -498,48 +520,41 @@ export class TransactionService {
   }
 
   async downgradeSubscriptions(subscriptionId: string, newStripePlanId: string) {
-
     try {
       const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+
+      console.log('Downgrade subscription attempt:', subscription.status);
 
       if (!subscription || !subscription.items.data.length) {
         throw new Error('Subscription not found or has no items');
       }
 
-      // let data = {
-      //   cancel_at_period_end: false,
-      //   trial_end: "now",
-      //   payment_behavior: 'default_incomplete',
-      //   proration_behavior: 'none',
-      //   items: [
-      //     {
-      //       id: subscription.items.data[0].id,
-      //       plan: newStripePlanId,
-      //     },
-      //   ]
-      // };
-      // await this.stripe.subscriptions.update(subscriptionId, data);
+      if (subscription.status === 'canceled' || subscription.ended_at) {
+        throw new BadRequestException(
+          'This subscription is already canceled. You cannot downgrade it. Please create a new subscription.'
+        );
+      }
 
-      await this.stripe.subscriptions.update(subscriptionId,
-        {
-          cancel_at_period_end: false,
-          trial_end: "now",
-          payment_behavior: 'default_incomplete',
-          proration_behavior: 'none',
-          items: [
-            {
-              id: subscription.items.data[0].id,
-              plan: newStripePlanId,
-            },
-          ]
-        }
-      )
+      const updatedSubscription = await this.stripe.subscriptions.update(subscriptionId, {
+        cancel_at_period_end: false,
+        trial_end: 'now',
+        payment_behavior: 'default_incomplete',
+        proration_behavior: 'none',
+        items: [
+          {
+            id: subscription.items.data[0].id,
+            plan: newStripePlanId,
+          },
+        ],
+      });
 
+      return updatedSubscription;
     } catch (error) {
       console.error('Failed to downgrade subscription:', error);
       throw new BadRequestException(`Failed to downgrade subscription: ${error.message}`);
     }
   }
+
 
 
 
