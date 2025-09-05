@@ -7,6 +7,7 @@ import { SubscriptionStatus } from 'src/enums/subscription.enum';
 import {
   TransactionMethod,
   TransactionStatus,
+  TransactionType,
 } from 'src/enums/transaction.enum';
 import { CreatePlanDto } from 'src/plan/dto/create.plan.dto';
 import { UpdatePlanDto } from 'src/plan/dto/update.plan.dto';
@@ -142,7 +143,6 @@ export class TransactionService {
         this.configService.get<string>('STRIPE_WEBHOOK_ENDPOINT_SECRET')!,
       );
     } catch (err: any) {
-      console.error('Webhook signature verification failed:', err?.message);
       throw new BadRequestException(`Webhook error: ${err?.message}`);
     }
 
@@ -150,7 +150,6 @@ export class TransactionService {
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object as Stripe.Checkout.Session;
-
           const fullSession = await this.stripe.checkout.sessions.retrieve(
             session.id,
             { expand: ['payment_intent'] },
@@ -173,7 +172,7 @@ export class TransactionService {
           if (transaction) {
             await this.walletModel.findByIdAndUpdate(walletId, {
               $inc: { amount: transaction.amount },
-              $push: { transations: transaction._id },
+              $push: { transactions: transaction._id },
               lastTransactionAmount: transaction.amount,
               lastTransactionId: transaction._id,
             });
@@ -181,6 +180,7 @@ export class TransactionService {
 
           break;
         }
+
         case 'payment_intent.payment_failed': {
           const pi = event.data.object as Stripe.PaymentIntent;
 
@@ -190,6 +190,7 @@ export class TransactionService {
           );
           break;
         }
+
         case 'payment_intent.succeeded': {
           const pi = event.data.object as Stripe.PaymentIntent;
           const walletId = pi.metadata?.walletId;
@@ -213,16 +214,63 @@ export class TransactionService {
 
           break;
         }
+
+        case 'invoice.created': {
+          const invoice = event.data.object as Stripe.Invoice;
+          console.log(`Invoice created: ${invoice.id} for customer ${invoice.customer} ${invoice.parent?.subscription_details?.metadata?.subscriptionDocId}`);
+
+          break;
+        }
+
+        case 'invoice.paid': {
+          const invoice = event.data.object as Stripe.Invoice;
+          const subscriptionDocumentId = invoice.parent?.subscription_details?.metadata?.subscriptionDocId
+
+          await this.subscriptionModel.findByIdAndUpdate(subscriptionDocumentId, {
+            startDate: new Date(invoice.period_start * 1000),
+            endDate: new Date(invoice.period_end * 1000),
+            status: SubscriptionStatus.ACTIVE,
+          })
+          break;
+        }
+
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object as Stripe.Invoice;
+          const subscriptionDocumentId = invoice.parent?.subscription_details?.metadata?.subscriptionDocId
+
+          await this.subscriptionModel.findByIdAndUpdate(subscriptionDocumentId, {
+            startDate: new Date(invoice.period_start * 1000),
+            endDate: new Date(invoice.period_end * 1000),
+            currentPeriodEnd: new Date(invoice.period_end * 1000),
+            currentPeriodStart: new Date(invoice.period_start * 1000),
+          })
+          break;
+        }
+
+        case 'invoice.payment_action_required': {
+          const invoice = event.data.object as Stripe.Invoice;
+          const stripeSubscriptionId = (invoice as any).subscription as string | undefined;
+
+          if (stripeSubscriptionId) {
+            await this.subscriptionModel.findOneAndUpdate(
+              { stripeSubscriptionId },
+              { $set: { status: SubscriptionStatus.INCOMPLETE } },
+            );
+          }
+          break;
+        }
+
         default:
           break;
       }
 
       return { received: true };
     } catch (error: any) {
-      console.error('Webhook handling error:', error?.message);
       throw new BadRequestException(`Webhook error: ${error?.message}`);
     }
   }
+
+
 
   async createPlan(createPlanDto: CreatePlanDto, userId: Types.ObjectId) {
     const { name, price, currency, duration, durationUnit, features } = createPlanDto;
@@ -318,97 +366,180 @@ export class TransactionService {
 
 
   async createSubscription(planId: Types.ObjectId, userId: Types.ObjectId) {
-    console.log("transaction --------------->")
-    // console.log(planId, userId)
-    const plan = await this.planModel.findById(planId);
+    if (!Types.ObjectId.isValid(planId) || !Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException('Invalid plan or user ID');
+    }
+
+    const [plan, user] = await Promise.all([
+      this.planModel.findById(planId),
+      this.userModel.findById(userId),
+    ]);
+
     if (!plan) throw new NotFoundException('Plan not found');
-
-    const user = await this.userModel.findById(userId);
     if (!user) throw new NotFoundException('User not found');
-
-    let stripeCustomerId = user.stripeCustomerId;
-    if (!stripeCustomerId) {
-      const customer = await this.stripe.customers.create({
-        email: user.email,
-        name: user.name,
-      });
-
-      stripeCustomerId = customer.id;
-      user.stripeCustomerId = stripeCustomerId;
-      await user.save();
-    }
-
-    const subscription = await this.stripe.subscriptions.create({
-      customer: stripeCustomerId,
-      items: [{ plan: plan.stripePlanId }],
-      payment_settings: {
-        save_default_payment_method: 'on_subscription',
-      },
-      payment_behavior: 'default_incomplete',
-      expand: ['latest_invoice.payment_intent'],
-    });
-
-    // console.log("subscription details:", subscription)
-    const startDate = new Date(subscription.start_date * 1000);
-    let durationInMs: number;
-
-    switch (plan.durationUnit) {
-      case PlanDurationUnit.DAY:
-        durationInMs = plan.duration * 24 * 60 * 60 * 1000;
-        break;
-      case PlanDurationUnit.WEEK:
-        durationInMs = plan.duration * 7 * 24 * 60 * 60 * 1000;
-        break;
-      case PlanDurationUnit.MONTH:
-        durationInMs = plan.duration * 30 * 24 * 60 * 60 * 1000;
-        break;
-      case PlanDurationUnit.YEAR:
-        durationInMs = plan.duration * 365 * 24 * 60 * 60 * 1000;
-        break;
-      default:
-        durationInMs = 0;
-    }
-    const endDate = new Date(startDate.getTime() + durationInMs);
-
-    const subscriptionDoc = await this.subscriptionModel.create({
+    if (user.stripeSubscriptionId) throw new BadRequestException(
+      'You are not able to buy a new subscription. Please upgrade your existing subscription.'
+    );
+    if (!plan.stripePlanId) throw new NotFoundException('Plan is missing Stripe plan ID');
+    const startDate = new Date();
+    const subscriptionDoc = new this.subscriptionModel({
       userId,
       planId,
-      stripeSubscriptionId: subscription.id,
+      stripeSubscriptionId: null,
       status: SubscriptionStatus.INCOMPLETE,
-      startDate: startDate,
-      endDate: endDate,
+      startDate,
+      endDate: new Date(startDate.getTime() + (plan.duration || 30) * 24 * 60 * 60 * 1000),
       currentPeriodStart: startDate,
-      currentPeriodEnd: endDate,
+      currentPeriodEnd: new Date(startDate.getTime() + (plan.duration || 30) * 24 * 60 * 60 * 1000),
+    });
+    await subscriptionDoc.save();
+
+    let stripeCustomerId = user.stripeCustomerId;
+
+    if (!stripeCustomerId) {
+      try {
+        const customer = await this.stripe.customers.create({
+          email: user.email || undefined,
+          name: user.name || undefined,
+          metadata: { userId: userId.toString(), subscriptionDocId: subscriptionDoc._id.toString() },
+        });
+
+        stripeCustomerId = customer.id;
+        user.stripeCustomerId = stripeCustomerId;
+
+        await user.save();
+      } catch (error: any) {
+        throw new Error(`Failed to create Stripe customer: ${error.message}`);
+      }
+    }
+
+    let subscription: Stripe.Subscription;
+    try {
+      subscription = await this.stripe.subscriptions.create({
+        customer: stripeCustomerId,
+        items: [{ plan: plan.stripePlanId }],
+        payment_settings: { save_default_payment_method: 'on_subscription' },
+        payment_behavior: 'default_incomplete',
+        expand: ['latest_invoice.payment_intent'],
+        metadata: { subscriptionDocId: subscriptionDoc._id.toString() },
+      });
+
+    } catch (error: any) {
+      throw new Error(`Failed to create Stripe subscription: ${error.message}`);
+    }
+
+    subscriptionDoc.stripeSubscriptionId = subscription.id;
+    subscriptionDoc.status = subscription.status as SubscriptionStatus;
+    subscriptionDoc.startDate = startDate;
+    subscriptionDoc.currentPeriodStart = startDate;
+    subscriptionDoc.currentPeriodEnd = subscriptionDoc.endDate
+    await subscriptionDoc.save();
+
+    user.stripeSubscriptionId = subscription.id
+
+    await user.save()
+
+    const transaction = await this.transactionModel.create({
+      userId: userId,
+      amount: plan.price,
+      currency: plan.currency || 'usd',
+      status: TransactionStatus.PENDING, 
+      transactionMethod: TransactionMethod.CARD, 
+      type: TransactionType.SUBSCRIPTION_CREATE,
+      stripeSubscriptionId: subscription.id,
+      newPlanId: planId,
+      description: `Subscription purchase: ${plan.name}`
     });
 
-    return subscriptionDoc;
+    if (user.walletId) {
+      await this.walletModel.findByIdAndUpdate(user.walletId, {
+        $push: { transactions: transaction._id },
+      });
+    }
+
+
+    return {
+      subscription: subscriptionDoc,
+      paymentIntent: subscription.latest_invoice
+        ? (subscription.latest_invoice as any).payment_intent
+        : null,
+    };
   }
 
 
-  // async upgradeSubscriptions(subsId: string, stripe_plan_id: string) {
-  //   try {
-  //     const subscription = await this.stripe.subscriptions.retrieve(subsId);
-  //     let data_to_upadte = {
-  //       cancel_at_period_end: false,
-  //       trial_end: "now",
-  //       payment_behavior: 'default_incomplete',
-  //       proration_behavior: 'always_invoice',
-  //       items: [
-  //         {
-  //           id: subscription.items.data[0].id,
-  //           plan: stripe_plan_id,
-  //         },
-  //       ],
-  //       expand: ['latest_invoice.payment_intent']
-  //     };
-  //     const updatedSubscription = await this.stripe.subscriptions.update(subsId, data_to_upadte);
-  //     return updatedSubscription;
-  //   } catch (error) {
-  //     throw error
-  //   }
-  // }
 
+  async upgradeSubscriptions(subscriptionId: string, newStripePlanId: string) {
+    try {
+      const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
 
+      if (!subscription || !subscription.items.data.length) {
+        throw new Error('Subscription not found or has no items');
+      }
+
+      const updatedSubscription = await this.stripe.subscriptions.update(subscriptionId, {
+        cancel_at_period_end: false,
+        proration_behavior: 'always_invoice',
+        items: [
+          {
+            id: subscription.items.data[0].id,
+            plan: newStripePlanId,
+          },
+        ],
+        payment_behavior: 'default_incomplete',
+        expand: ['latest_invoice.payment_intent'],
+      });
+
+      console.log(' Subscription upgraded successfully:', updatedSubscription.id);
+      return updatedSubscription;
+    } catch (error) {
+      console.error('Failed to upgrade subscription:', error);
+      throw new BadRequestException(`Failed to upgrade subscription: ${error.message}`);
+    }
+  }
+
+  async downgradeSubscriptions(subscriptionId: string, newStripePlanId: string) {
+
+    try {
+      const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+
+      if (!subscription || !subscription.items.data.length) {
+        throw new Error('Subscription not found or has no items');
+      }
+
+      // let data = {
+      //   cancel_at_period_end: false,
+      //   trial_end: "now",
+      //   payment_behavior: 'default_incomplete',
+      //   proration_behavior: 'none',
+      //   items: [
+      //     {
+      //       id: subscription.items.data[0].id,
+      //       plan: newStripePlanId,
+      //     },
+      //   ]
+      // };
+      // await this.stripe.subscriptions.update(subscriptionId, data);
+
+      await this.stripe.subscriptions.update(subscriptionId,
+        {
+          cancel_at_period_end: false,
+          trial_end: "now",
+          payment_behavior: 'default_incomplete',
+          proration_behavior: 'none',
+          items: [
+            {
+              id: subscription.items.data[0].id,
+              plan: newStripePlanId,
+            },
+          ]
+        }
+      )
+
+    } catch (error) {
+      console.error('Failed to downgrade subscription:', error);
+      throw new BadRequestException(`Failed to downgrade subscription: ${error.message}`);
+    }
+  }
 
 
 

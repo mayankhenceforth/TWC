@@ -8,14 +8,14 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.use('/transaction/webhook', bodyParser.raw({ type: 'application/json' }));
-app.use(bodyParser.json()); 
+  app.use(bodyParser.json());
 
 
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,            
-      forbidNonWhitelisted: true, 
-      transform: true,           
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
     }),
   );
 
@@ -24,7 +24,7 @@ app.use(bodyParser.json());
     .setTitle('TWC  API')
     .setDescription('API documentation for TWC')
     .setVersion('1.0')
-    .addBearerAuth() 
+    .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

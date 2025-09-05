@@ -2,12 +2,12 @@ import { Controller, Post, Put, Delete, Get, Body, Param, Req, UseGuards, BadReq
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuards } from 'src/guards/auth.guards';
 import { CreatePayoutDto } from './dto/create.payout.dto';
-import { PayoutService } from './payout.service';
+import { PayoutService } from './account.service';
 import { Request } from 'express';
 import * as mongoose from 'mongoose';
 
-@ApiTags('Payouts')
-@Controller('payout')
+@ApiTags('Account')
+@Controller('account')
 export class PayoutController {
   constructor(private readonly payoutService: PayoutService) {}
 

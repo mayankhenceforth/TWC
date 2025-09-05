@@ -67,6 +67,9 @@ export class User {
     @Prop({ required: false })
     stripeCustomerId: string
 
+    @Prop({required:false})
+    stripeSubscriptionId:string
+
 }
 
 @Schema({ timestamps: true })

@@ -10,7 +10,7 @@ import { MailService } from './mail/mail.service';
 import { MailModule } from './mail/mail.module';
 
 import { JwtModule } from '@nestjs/jwt';
-import { PayoutModule } from './payout/payout.module';
+
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { GuardModule } from './guards/guards.module';
 import { GameModule } from './game/game.module';
@@ -19,6 +19,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { TransactionModule } from './transaction/transaction.module';
 import { PlanModule } from './plan/plan.module';
 import { SubscriptionModule } from './subscription/subscription.module';
+import { AccountModule } from './Account/account.module';
 
 @Module({
   imports: [
@@ -41,7 +42,7 @@ import { SubscriptionModule } from './subscription/subscription.module';
     // Feature Modules
     AuthModule,
     UserModule,
-    PayoutModule,
+    AccountModule,
     GameModule,
 
     // Common Functional Modules

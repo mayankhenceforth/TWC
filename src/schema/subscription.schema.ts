@@ -25,7 +25,13 @@ export class Subscription {
   status: SubscriptionStatus;
 
   @Prop({ required: false })
-  stripeSubscriptionId?: string
+  stripeSubscriptionId?: string;
+
+  @Prop({ required: false })
+  currentPeriodStart: Date;
+
+  @Prop({ required: false })
+  currentPeriodEnd: Date;
 }
 
 export const SubscriptionSchema = SchemaFactory.createForClass(Subscription);

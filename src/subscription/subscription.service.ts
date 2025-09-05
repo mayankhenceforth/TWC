@@ -14,10 +14,22 @@ export class SubscriptionService {
     ) { }
 
 
-    async createSubscription(planId:Types.ObjectId , userId :Types.ObjectId){
+    async createSubscription(planId: Types.ObjectId, userId: Types.ObjectId) {
         console.log("subscription----------------->")
-        console.log(planId ,userId)
         const response = await this.transactionService.createSubscription(planId, userId)
+        return response
+    }
+
+    async upgradeSubscriptions(subscriptionId: string, newStripePlanId: string) {
+        console.log("upgrade subscription----------------->")
+        const response = await this.transactionService.upgradeSubscriptions(subscriptionId, newStripePlanId)
+        return response
+    }
+
+    async downgradeSubscriptions(subscriptionId: string, newStripePlanId: string) {
+        console.log("Downgrade subscription --------------->")
+        const response = await this.transactionService.downgradeSubscriptions(subscriptionId, newStripePlanId)
+
         return response
     }
 

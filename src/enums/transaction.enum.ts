@@ -19,10 +19,14 @@ export enum TransactionType {
     WITHDRAWAL = 'withdrawal',
     BONUS = 'bonus',
     OTHER = 'other',
+    SUBSCRIPTION_UPGRADE = 'subscription_upgrade',
+    SUBSCRIPTION_CREATE = 'subscription_create',
+    SUBSCRIPTION_RENEWAL = 'subscription_renewal',
 }
 
 export enum RefundStatus {
     NONE = 'none',
     PROCESSED = 'processed',
     FAILED = 'failed',
+    PENDING = 'pending'
 }
