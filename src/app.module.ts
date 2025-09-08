@@ -20,6 +20,8 @@ import { TransactionModule } from './transaction/transaction.module';
 import { PlanModule } from './plan/plan.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { AccountModule } from './Account/account.module';
+import { ChatModule } from './chat/chat.module';
+import { PhonepeModule } from './phonepe/phonepe.module';
 
 @Module({
   imports: [
@@ -30,7 +32,7 @@ import { AccountModule } from './Account/account.module';
         secret: config.get<string>('ACCESS_TOKEN_SECRET'),
         signOptions: { expiresIn: '1d' },
       }),
-       global: true,
+      global: true,
     }),
     ConfigModule.forRoot({
       isGlobal: true,
@@ -41,9 +43,17 @@ import { AccountModule } from './Account/account.module';
 
     // Feature Modules
     AuthModule,
-    UserModule,
     AccountModule,
+    ChatModule,
     GameModule,
+    PlanModule,
+    SubscriptionModule,
+    TransactionModule,
+    TicketModule,
+    UserModule,
+    WalletModule,
+
+
 
     // Common Functional Modules
     SmsModule,
@@ -51,11 +61,9 @@ import { AccountModule } from './Account/account.module';
     MailModule,
     GuardModule,
     CloudinaryModule,
-    TicketModule,
-    WalletModule,
-    TransactionModule,
-    PlanModule,
-    SubscriptionModule
+    PhonepeModule,
+
+
   ],
   controllers: [],
   providers: [],

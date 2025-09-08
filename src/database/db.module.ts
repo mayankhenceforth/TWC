@@ -9,6 +9,9 @@ import { Wallet, WalletSchema } from "src/schema/wallet.schema";
 import { Transaction, TransactionSchema } from "src/schema/transaction.schema";
 import { Plan, PlanSchema } from "src/schema/plan.schema";
 import { Subscription, SubscriptionSchema } from "src/schema/subscription.schema";
+import { Chats, ChatsSchema } from "src/chat/schema/chat.schema";
+import { Group, GroupSchema } from "src/chat/schema/group.schema";
+import { Payment, PaymentSchema } from "src/phonepe/schema/phonepe.schema";
 
 
 @Global()
@@ -23,7 +26,10 @@ import { Subscription, SubscriptionSchema } from "src/schema/subscription.schema
         {name:Wallet.name ,schema:WalletSchema},
         {name:Transaction.name ,schema:TransactionSchema},
         {name:Plan.name ,schema:PlanSchema},
-        {name:Subscription.name ,schema:SubscriptionSchema}
+        {name:Subscription.name ,schema:SubscriptionSchema},
+        {name:Chats.name ,schema :ChatsSchema},
+        {name:Group.name ,schema:GroupSchema},
+        {name:Payment.name ,schema:PaymentSchema}
     ])],
     providers: [],
     exports: [MongooseModule]
