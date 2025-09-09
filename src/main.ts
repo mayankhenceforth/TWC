@@ -3,13 +3,16 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import * as bodyParser from 'body-parser';
+import helmet from 'helmet';
+import * as morgan from 'morgan';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(helmet());
+  app.use(morgan('dev'));
 
   app.use('/transaction/webhook', bodyParser.raw({ type: 'application/json' }));
   app.use(bodyParser.json());
-
 
   app.useGlobalPipes(
     new ValidationPipe({

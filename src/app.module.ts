@@ -20,6 +20,7 @@ import { TransactionModule } from './transaction/transaction.module';
 import { PlanModule } from './plan/plan.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { AccountModule } from './Account/account.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -55,7 +56,8 @@ import { AccountModule } from './Account/account.module';
     WalletModule,
     TransactionModule,
     PlanModule,
-    SubscriptionModule
+    SubscriptionModule,
+    ChatModule
   ],
   controllers: [],
   providers: [],
