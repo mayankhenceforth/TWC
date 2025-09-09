@@ -22,6 +22,7 @@ import { SubscriptionModule } from './subscription/subscription.module';
 import { AccountModule } from './Account/account.module';
 import { ChatModule } from './chat/chat.module';
 import { PhonepeModule } from './phonepe/phonepe.module';
+import { RazorpayModule } from './razorpay/razorpay.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { PhonepeModule } from './phonepe/phonepe.module';
     GuardModule,
     CloudinaryModule,
     PhonepeModule,
+    RazorpayModule,
 
 
   ],

@@ -45,19 +45,22 @@ export class PhonePeService {
             const merchantTransactionId = paymentDto.merchantTransactionId || `txn_${randomUUID()}`;
             const callbackUrl = paymentDto.callbackUrl || `${this.appBaseUrl}/payment/callback`;
 
+
+
+            const redirectUrl = `${this.appBaseUrl}/payment/status/${merchantTransactionId}`;
             const payment = await this.paymentModel.create(
                 {
-                    merchantId:this.merchantId,
+                    merchantId: this.merchantId,
                     merchantTransactionId,
                     amount,
                     userId,
                     status: PaymentStatus.PENDING,
                     callbackUrl,
                     createdAt: new Date()
-
                 }
-            )
+            );
 
+            console.log('Created payment document:', payment);
 
             const payload = {
                 merchantId: this.merchantId,
@@ -92,41 +95,47 @@ export class PhonePeService {
                 },
             );
 
-            if (response.data.success && response.data.data?.instrumentResponse?.redirectInfo) {
+            console.log('PhonePe initiation response:', JSON.stringify(response.data, null, 2));
 
-                const data = await this.paymentModel.findOneAndUpdate(
+            if (response.data.success && response.data.data?.instrumentResponse?.redirectInfo) {
+                const updatedPayment = await this.paymentModel.findOneAndUpdate(
                     { merchantTransactionId },
                     {
-                        status:PaymentStatus.PENDING,
+                        status: PaymentStatus.PROCESSING,
                         phonePeResponse: response.data,
-                        redirectUrl: response.data.data.instrumentResponse.redirectInfo.url
-                    }
+                        redirectUrl: response.data.data.instrumentResponse.redirectInfo.url,
+                        updatedAt: new Date(),
+                    },
+                    { new: true }
                 );
-                await data?.save()
 
-                console.log("data:",data)
-
+                console.log('Updated payment after initiation:', updatedPayment);
 
                 return {
                     success: true,
                     message: 'Payment initiated',
                     merchantTransactionId,
-                    redirectUrl: response.data.data.instrumentResponse.redirectInfo.url,
+                    redirectUrl: updatedPayment?.redirectUrl,
                 };
             } else {
-
                 await this.paymentModel.findOneAndUpdate(
                     { merchantTransactionId },
                     {
                         status: PaymentStatus.FAILED,
                         phonePeResponse: response.data,
-                        errorMessage: response.data.message || 'Failed to initiate payment'
-                    }
+                        errorMessage: response.data.message || 'Failed to initiate payment',
+                        updatedAt: new Date(),
+                    },
+                    { new: true }
                 );
+
+                console.log('Failed to initiate, updated payment to FAILED');
 
                 throw new Error(response.data.message || 'Failed to initiate payment');
             }
+
         } catch (error: any) {
+            console.error('Payment initiation error details:', error.response?.data || error.message);
             this.logger.error(`Payment initiation error: ${error.response?.data || error.message}`);
             throw new HttpException(
                 error.response?.data?.message || 'Failed to initiate payment',
@@ -142,7 +151,6 @@ export class PhonePeService {
 
             this.logger.log(`Checking payment status for transaction: ${merchantTransactionId}`);
 
-
             const response = await axios.get(`${this.phonePayBaseUrl}${path}`, {
                 headers: {
                     'Content-Type': 'application/json',
@@ -153,11 +161,38 @@ export class PhonePeService {
                 timeout: 10000,
             });
 
+            console.log('Payment status response:', JSON.stringify(response.data, null, 2));
+
+            const status = response.data.data?.state || response.data.data?.status;
+            let paymentStatus = PaymentStatus.PENDING;
+
+            if (status === 'COMPLETED' || status === 'SUCCESS') {
+                paymentStatus = PaymentStatus.SUCCESS;
+            } else if (status === 'FAILED' || status === 'CANCELLED') {
+                paymentStatus = PaymentStatus.FAILED;
+            } else if (status === 'PROCESSING' || status === 'PENDING') {
+                paymentStatus = PaymentStatus.PROCESSING;
+            }
+
+            const updatedPayment = await this.paymentModel.findOneAndUpdate(
+                { merchantTransactionId },
+                {
+                    status: paymentStatus,
+                    phonePeStatusResponse: response.data,
+                    updatedAt: new Date(),
+                },
+                { new: true }
+            );
+
+            console.log('Updated payment after status check:', updatedPayment);
+
             return {
                 success: true,
                 data: response.data,
+                documentStatus: paymentStatus,
             };
         } catch (error: any) {
+            console.error('Verify payment error details:', error.response?.data || error.message);
             this.logger.error(`Verify payment error: ${error.response?.data || error.message}`);
             throw new HttpException(
                 error.response?.data?.message || 'Failed to verify payment',
@@ -166,34 +201,98 @@ export class PhonePeService {
         }
     }
 
-    async processCallback(callbackData: { body: any; headers: any }): Promise<{ success: boolean; transactionData?: any }> {
-        try {
-            this.logger.log('Payment callback received');
+   async processCallback(callbackData: { body: any; headers: any }): Promise<{ success: boolean; transactionData?: any }> {
+    try {
+        console.log('Callback body:', JSON.stringify(callbackData.body, null, 2));
+        console.log('Callback headers:', JSON.stringify(callbackData.headers, null, 2));
 
+        this.logger.log('Payment callback received');
+
+    
+        const isServerCallback = callbackData.headers?.['x-verify'] || callbackData.headers?.['X-VERIFY'];
+        
+        if (isServerCallback) {
+           
             const isValid = this.validateCallbackChecksum(callbackData);
+            console.log('Server callback checksum validation result:', isValid);
 
             if (!isValid) {
-                this.logger.error('Invalid callback checksum');
+                this.logger.error('Invalid server callback checksum');
                 return { success: false };
             }
+            this.logger.log('Server callback checksum validated successfully');
+        } else {
+           
+            this.logger.log('Browser redirect callback received (no checksum validation needed)');
+            
+            if (callbackData.body.checksum) {
+            
+                console.log('Browser redirect with checksum in body');
+            }
+        }
 
-            this.logger.log('Callback checksum validated successfully');
-
+        let decodedData;
+        if (isServerCallback) {
+           
             const responseBuffer = Buffer.from(callbackData.body.response, 'base64');
-            const decodedData = JSON.parse(responseBuffer.toString('utf8'));
-
-            this.logPaymentDetails(decodedData);
-            console.log(decodedData)
-
-            return {
+            decodedData = JSON.parse(responseBuffer.toString('utf8'));
+        } else {
+            
+            decodedData = {
                 success: true,
-                transactionData: decodedData,
+                code: callbackData.body.code,
+                message: 'Payment completed via browser redirect',
+                data: {
+                    merchantId: callbackData.body.merchantId,
+                    merchantTransactionId: callbackData.body.transactionId,
+                    transactionId: callbackData.body.providerReferenceId,
+                    amount: parseInt(callbackData.body.amount),
+                    state: callbackData.body.code === 'PAYMENT_SUCCESS' ? 'COMPLETED' : 'FAILED',
+                    responseCode: callbackData.body.code
+                }
             };
-        } catch (error) {
-            this.logger.error(`Error processing callback: ${error}`);
+        }
+
+        console.log('Processed callback data:', JSON.stringify(decodedData, null, 2));
+
+        const merchantTransactionId = decodedData.data?.merchantTransactionId;
+        if (!merchantTransactionId) {
+            console.error('No merchantTransactionId in callback data');
             return { success: false };
         }
+
+        const status = decodedData.data?.state || decodedData.code;
+        let paymentStatus = PaymentStatus.PENDING;
+
+        if (status === 'PAYMENT_SUCCESS' || status === 'COMPLETED') {
+            paymentStatus = PaymentStatus.SUCCESS;
+        } else if (status === 'PAYMENT_ERROR' || status === 'FAILED') {
+            paymentStatus = PaymentStatus.FAILED;
+        }
+//  check this logic and also update the document
+
+        const updatedPayment = await this.paymentModel.findOneAndUpdate(
+            { merchantTransactionId },
+            {
+                status: paymentStatus,
+                phonePeCallbackResponse: decodedData,
+                updatedAt: new Date(),
+            },
+            { new: true }
+        );
+
+        console.log('Updated payment after callback:', updatedPayment);
+
+        return {
+            success: true,
+            transactionData: decodedData,
+        };
+    } catch (error) {
+        console.error('Error processing callback:', error);
+        this.logger.error(`Error processing callback: ${error}`);
+        return { success: false };
     }
+}
 
     async payToDriverUpi(payoutDto: PayoutRequestDto): Promise<any> {
         try {
@@ -224,6 +323,9 @@ export class PhonePeService {
             const apiEndpoint = '/pg/v1/payout';
             const checksum = this.generateChecksum(base64Payload, apiEndpoint);
 
+
+            console.log("checksum:", checksum)
+
             const response = await axios.post(
                 `${this.phonePayBaseUrl}${apiEndpoint}`,
                 { request: base64Payload },
@@ -237,6 +339,9 @@ export class PhonePeService {
                     timeout: 15000,
                 },
             );
+            console.log("response:", response)
+
+            console.log('Driver UPI payout response:', JSON.stringify(response.data, null, 2));
 
             this.logPayoutResponse(response.data, 'DRIVER_UPI');
 
@@ -247,6 +352,7 @@ export class PhonePeService {
                 payoutData: response.data,
             };
         } catch (error: any) {
+            console.error('Driver UPI payout error details:', error.response?.data || error.message);
             this.logger.error(`Driver UPI payout error: ${error.response?.data || error.message}`);
             throw new HttpException(
                 error.response?.data?.message || 'Failed to process driver payout',
@@ -299,6 +405,8 @@ export class PhonePeService {
                 },
             );
 
+            console.log('Driver Bank payout response:', JSON.stringify(response.data, null, 2));
+
             this.logger.log('Driver Bank Payout Success');
 
             return {
@@ -308,6 +416,7 @@ export class PhonePeService {
                 payoutData: response.data,
             };
         } catch (error: any) {
+            console.error('Driver bank payout error details:', error.response?.data || error.message);
             this.logger.error(`Driver bank payout error: ${error.response?.data || error.message}`);
             throw new HttpException(
                 error.response?.data?.message || 'Failed to process driver bank payout',
@@ -333,6 +442,8 @@ export class PhonePeService {
                 timeout: 10000,
             });
 
+            console.log('Driver payout status response:', JSON.stringify(response.data, null, 2));
+
             this.logger.log(`Driver Payout Status: ${response.data?.data?.status || 'UNKNOWN'}`);
 
             return {
@@ -340,6 +451,7 @@ export class PhonePeService {
                 statusData: response.data,
             };
         } catch (error: any) {
+            console.error('Driver payout status error details:', error.response?.data || error.message);
             this.logger.error(`Driver payout status error: ${error.response?.data || error.message}`);
             throw new HttpException(
                 error.response?.data?.message || 'Failed to check driver payout status',
@@ -393,14 +505,10 @@ export class PhonePeService {
             };
 
             this.logger.log(`Initiating AutoPay Mandate for ${recipientName} (UPI: ${recipientUpiId})`);
-            this.logger.log(`Payload: ${JSON.stringify(payload)}`);
 
             const base64Payload = Buffer.from(JSON.stringify(payload)).toString('base64');
             const apiEndpoint = '/pg/v1/mandate';
             const checksum = this.generateChecksum(base64Payload, apiEndpoint);
-
-            this.logger.log(`Requesting mandate creation at: ${this.phonePayBaseUrl}${apiEndpoint}`);
-            this.logger.log(`Checksum: ${checksum}`);
 
             const response = await axios.post(
                 `${this.phonePayBaseUrl}${apiEndpoint}`,
@@ -416,7 +524,7 @@ export class PhonePeService {
                 },
             );
 
-            this.logger.log(`Mandate creation response: ${JSON.stringify(response.data)}`);
+            console.log('Mandate creation response:', JSON.stringify(response.data, null, 2));
 
             if (response.data.success && response.data.data?.instrumentResponse?.redirectInfo) {
                 this.logger.log('AutoPay Mandate initiated successfully');
@@ -431,6 +539,7 @@ export class PhonePeService {
                 throw new Error(response.data.message || 'Failed to initiate AutoPay mandate');
             }
         } catch (error: any) {
+            console.error('AutoPay mandate creation error details:', error.response?.data || error.message);
             this.logger.error(`AutoPay mandate creation error: ${error.response?.data || error.message}`);
             throw new HttpException(
                 error.response?.data?.message || 'Failed to initiate AutoPay mandate',
@@ -456,6 +565,8 @@ export class PhonePeService {
                 timeout: 10000,
             });
 
+            console.log('Mandate status response:', JSON.stringify(response.data, null, 2));
+
             this.logger.log(`Mandate Status: ${response.data?.data?.status || 'UNKNOWN'}`);
 
             return {
@@ -463,6 +574,7 @@ export class PhonePeService {
                 statusData: response.data,
             };
         } catch (error: any) {
+            console.error('Mandate status error details:', error.response?.data || error.message);
             this.logger.error(`Mandate status error: ${error.response?.data || error.message}`);
             throw new HttpException(
                 error.response?.data?.message || 'Failed to check mandate status',
@@ -500,6 +612,8 @@ export class PhonePeService {
                 },
             );
 
+            console.log('Mandate revoke response:', JSON.stringify(response.data, null, 2));
+
             this.logger.log('AutoPay Mandate Revoked Successfully');
 
             return {
@@ -509,6 +623,7 @@ export class PhonePeService {
                 revokeData: response.data,
             };
         } catch (error: any) {
+            console.error('Mandate revocation error details:', error.response?.data || error.message);
             this.logger.error(`Mandate revocation error: ${error.response?.data || error.message}`);
             throw new HttpException(
                 error.response?.data?.message || 'Failed to revoke AutoPay mandate',
@@ -519,11 +634,14 @@ export class PhonePeService {
 
     async processMandateCallback(callbackData: { body: any; headers: any }): Promise<{ success: boolean; mandateData?: any }> {
         try {
+            console.log('Mandate callback body:', JSON.stringify(callbackData.body, null, 2));
+            console.log('Mandate callback headers:', JSON.stringify(callbackData.headers, null, 2));
+
             this.logger.log('Mandate callback received');
-            this.logger.log(`Webhook Body: ${JSON.stringify(callbackData.body)}`);
-            this.logger.log(`Webhook Headers: ${JSON.stringify(callbackData.headers)}`);
 
             const isValid = this.validateCallbackChecksum(callbackData);
+
+            console.log('Mandate checksum validation result:', isValid);
 
             if (!isValid) {
                 this.logger.error('Invalid mandate callback checksum');
@@ -535,6 +653,8 @@ export class PhonePeService {
             const responseBuffer = Buffer.from(callbackData.body.response, 'base64');
             const decodedData = JSON.parse(responseBuffer.toString('utf8'));
 
+            console.log('Decoded mandate callback data:', JSON.stringify(decodedData, null, 2));
+
             this.logMandateDetails(decodedData);
 
             return {
@@ -542,6 +662,7 @@ export class PhonePeService {
                 mandateData: decodedData,
             };
         } catch (error) {
+            console.error('Error processing mandate callback:', error);
             this.logger.error(`Error processing mandate callback: ${error}`);
             return { success: false };
         }
@@ -625,6 +746,11 @@ export class PhonePeService {
                 .update(stringToHash)
                 .digest('hex');
 
+            console.log('Checksum validation details:');
+            console.log('Received checksum (first 20 chars):', receivedChecksum.substring(0, 20));
+            console.log('Generated checksum (first 20 chars):', generatedChecksum.substring(0, 20));
+            console.log('Checksum match:', receivedChecksum === generatedChecksum);
+
             this.logger.log('Checksum Validation');
             this.logger.log(`Received: ${receivedChecksum.substring(0, 20)}...`);
             this.logger.log(`Generated: ${generatedChecksum.substring(0, 20)}...`);
@@ -632,6 +758,7 @@ export class PhonePeService {
 
             return receivedChecksum === generatedChecksum;
         } catch (error) {
+            console.error('Error in validateCallbackChecksum:', error);
             this.logger.error(`Error validating callback checksum: ${error}`);
             return false;
         }

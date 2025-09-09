@@ -53,6 +53,7 @@ export class GameController {
     @ApiOperation({ summary: 'Create a new game' })
     @ApiResponse({ status: 201, description: 'Game successfully created', type: Game })
     @ApiResponse({ status: 400, description: 'Bad request' })
+
     async create(@Body() createGameDto: CreateGameDto, @Request() req): Promise<any> {
         const userId = req.user._id;
         return this.gameService.create(createGameDto, userId);

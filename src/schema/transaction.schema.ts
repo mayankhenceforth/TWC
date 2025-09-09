@@ -48,8 +48,8 @@ export class Transaction {
     @Prop({ type: Date })
     refundedAt: Date;
 
-    @Prop({ required: true, enum: TransactionType })
-    type: TransactionType;
+    // @Prop({ required: true, enum: TransactionType })
+    // type: TransactionType;
 
     @Prop({ required: false })
     stripeSubscriptionId: string;

@@ -1,4 +1,4 @@
-// src/phonepe/dto/auto-pay-mandate-dto.ts
+
 import { IsNotEmpty, IsNumber, IsOptional, IsString, Min, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 

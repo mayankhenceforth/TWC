@@ -1,4 +1,3 @@
-// src/phonepe/payment.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
@@ -9,6 +8,7 @@ export enum PaymentStatus {
   SUCCESS = 'SUCCESS',
   FAILED = 'FAILED',
   PENDING = 'PENDING',
+  PROCESSING='PROCESSING'
 }
 
 @Schema({ timestamps: true })
@@ -37,10 +37,10 @@ export class Payment {
   @Prop({ type: Object, default: {} })
   callbackData: any;
 
-  @Prop({ type: String, default: null })
+  @Prop({ type: String, default:'' })
   redirectUrl: string;
 
-  @Prop({ type: String, default: null })
+  @Prop({ type: String, default:''})
   paymentInstrumentType: string;
 }
 
